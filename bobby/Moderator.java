@@ -16,13 +16,14 @@ public class Moderator implements Runnable {
     public void run() {
         while (true) {
             try {
+
 				/*acquire permits:
 				1) the moderator itself needs a permit to run, see Board
 				2) one needs a permit to modify thread info
 				*/
                 board.moderatorEnabler.acquire();
                 board.threadInfoProtector.acquire();
-
+                System.out.println("mod start");
 				/* 
 				look at the thread info, and decide how many threads can be 
 				permitted to play next round
@@ -45,7 +46,7 @@ public class Moderator implements Runnable {
                 //base case
 
                 if (this.board.embryo) {
-
+                    board.registration.release();
                     continue;
                 }
 
@@ -55,7 +56,7 @@ public class Moderator implements Runnable {
 
 
 				/*
-				If there are no threads at all, it means Game Over, and there are no 
+				If there are no threads at all, it means Game Over, and there are no
 				more new threads to "reap". dead has been set to true, then
 				the server won't spawn any more threads when it gets the lock.
 
@@ -63,7 +64,7 @@ public class Moderator implements Runnable {
 				As good practice, we will release the "lock" we held. 
 				*/
 
-                if(newbies==0)
+                if(T==0)
                 {
                     board.dead = true;
                     board.moderatorEnabler.release();
@@ -84,15 +85,16 @@ public class Moderator implements Runnable {
 
 				Release permits for threads to play, and the permit to modify thread info
 				*/
+
+                //if(newbies>0)
+
                 board.playingThreads = board.totalThreads;
                 board.quitThreads = 0;
 
+                board.registration.release(newbies);
+                board.reentry.release(board.playingThreads);
 
-
-                board.reentry.release();
                 board.threadInfoProtector.release();
-
-
             } catch (InterruptedException ex) {
                 System.err.println("An InterruptedException was caught: " + ex.getMessage());
                 ex.printStackTrace();

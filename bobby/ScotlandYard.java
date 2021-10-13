@@ -79,26 +79,29 @@ public class ScotlandYard implements Runnable {
 
                 do {
                     socket = server.accept();
-
-                    this.board.dead = false; //>
-
+                    this.board.threadInfoProtector.acquire();
+                    this.board.dead = true; //>
+                    this.board.threadInfoProtector.release();
                     if(socket != null)
                     {
                         fugitiveIn = true;
                     }
-
                     //fugitiveIn=true;
                 } while (!fugitiveIn);
 
                 System.out.println(this.gamenumber);
 
                 // Spawn a thread to run the Fugitive
-                Thread tau1 =  new Thread(new ServerThread(board,  -1,  socket,  port,  gamenumber));
-                tau1.join(); //?
+                Runnable  tau1 =  new ServerThread(board,  -1,  socket,  port,  gamenumber);
+                this.board.threadInfoProtector.acquire();
+                this.board.totalThreads += 1; //?
+                this.board.threadInfoProtector.release();
+                threadPool.execute(tau1);
 
                 // Spawn the moderator
-                Thread tau2 =  new Thread(new Moderator(board));
-                tau2.join(); //?
+                Thread mod = new Thread(new Moderator(board));
+                mod.start();
+
 
 
                 while (true) {
@@ -109,9 +112,7 @@ public class ScotlandYard implements Runnable {
                     Socket socket1 = null;
 
                     try {
-
                         socket1 = server.accept();
-
 
                     } catch (SocketTimeoutException t) {
                         if (!this.board.dead)
@@ -129,13 +130,18 @@ public class ScotlandYard implements Runnable {
 					don't forget to release lock when done!
 					*/
                     this.board.threadInfoProtector.acquire();
-                    if(this.board.getAvailableID() != -1) {
+                    if(this.board.getAvailableID() != -1 && !this.board.dead) {
                         int new_id = this.board.getAvailableID();
-
+                        Runnable tau3 =  new ServerThread(board,  new_id,  socket1,  port,  gamenumber);
+                        threadPool.execute(tau3);
+                        this.board.totalThreads += 1;
 
                     }
-                    else{
-
+                    else if(this.board.getAvailableID() == -1 && !this.board.dead){
+                        continue;
+                    }
+                    else if(this.board.getAvailableID() == -1 && this.board.dead){
+                        break;
                     }
                     this.board.threadInfoProtector.release();
 
@@ -144,16 +150,21 @@ public class ScotlandYard implements Runnable {
 				
 				kill threadPool (Careless Whispers BGM stops)
 				*/
+                    mod.join();
+                    server.close();
+                    threadPool.shutdown();
+
                 }
 
                 System.out.println(String.format("Game %d:%d Over", this.port, this.gamenumber));
                 return;
             }
-            catch (InterruptedException ex) {
+            catch (InterruptedException ex){
                 System.err.println("An InterruptedException was caught: " + ex.getMessage());
                 ex.printStackTrace();
                 return;
-            } catch (IOException i) {
+            }
+            catch (IOException i){
                 return;
             }
 
@@ -163,7 +174,7 @@ public class ScotlandYard implements Runnable {
     }
 
     public static void main(String[] args) {
-        for (int i = 0; i < args.length; i++) {
+        for (int i=0; i<args.length; i++){
             int port = Integer.parseInt(args[i]);
             Thread tau = new Thread(new ScotlandYard(port));
             tau.start();
