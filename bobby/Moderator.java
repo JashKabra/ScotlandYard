@@ -1,10 +1,5 @@
 package bobby;
 
-import java.net.*;
-import java.io.*;
-import java.util.*;
-
-import java.util.concurrent.Semaphore;
 
 public class Moderator implements Runnable {
     private Board board;
@@ -23,7 +18,8 @@ public class Moderator implements Runnable {
 				*/
                 board.moderatorEnabler.acquire();
                 board.threadInfoProtector.acquire();
-                System.out.println("mod start");
+                System.out.println("Mod permits(should be 0)* " + board.moderatorEnabler.availablePermits());
+                //System.out.println("Mod start");
 				/* 
 				look at the thread info, and decide how many threads can be 
 				permitted to play next round
@@ -47,6 +43,7 @@ public class Moderator implements Runnable {
 
                 if (this.board.embryo) {
                     board.registration.release();
+                    board.threadInfoProtector.release();
                     continue;
                 }
 
@@ -68,6 +65,8 @@ public class Moderator implements Runnable {
                 {
                     board.dead = true;
                     board.moderatorEnabler.release();
+                    board.threadInfoProtector.release();
+                    return;
                 }
 
 				                                  
@@ -89,12 +88,21 @@ public class Moderator implements Runnable {
                 //if(newbies>0)
 
                 board.playingThreads = board.totalThreads;
+                System.out.println("quitThreads " +board.quitThreads);
                 board.quitThreads = 0;
+                if(newbies>0 && board.registration.availablePermits()!=newbies)
+                    board.registration.release(newbies);
+                assert board.registration.availablePermits()==newbies;
+                System.out.println("newbies "+newbies); 
 
-                board.registration.release(newbies);
-                board.reentry.release(board.playingThreads);
-
+                if(board.playingThreads>0 && board.reentry.availablePermits()!=board.playingThreads )
+                    board.reentry.release(board.playingThreads);
+                assert board.reentry.availablePermits() == board.playingThreads;
+                System.out.println("playingThreads "+board.playingThreads);
+                System.out.println("reentry permits      "+ board.reentry.availablePermits());
+                System.out.println("registration permits "+ board.registration.availablePermits());
                 board.threadInfoProtector.release();
+               // System.out.println("Mod stop");
             } catch (InterruptedException ex) {
                 System.err.println("An InterruptedException was caught: " + ex.getMessage());
                 ex.printStackTrace();

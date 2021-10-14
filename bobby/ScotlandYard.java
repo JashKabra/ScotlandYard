@@ -2,11 +2,6 @@ package bobby;
 
 import java.net.*;
 import java.io.*;
-import java.util.*;
-
-import java.util.concurrent.Semaphore;
-
-
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -73,14 +68,22 @@ public class ScotlandYard implements Runnable {
 				
 				/*
 				listen for a client to play fugitive, and spawn the moderator.
-				
+
 				here, it is actually ok to edit this.board.dead, because the game hasn't begun
 				*/
 
                 do {
+                    try
+                    {
                     socket = server.accept();
+                    }
+                    catch(SocketTimeoutException ignored)
+                    {
+                        continue;
+                    }
                     this.board.threadInfoProtector.acquire();
-                    this.board.dead = true; //>
+                    if(socket!=null)
+                        this.board.dead = false; //>
                     this.board.threadInfoProtector.release();
                     if(socket != null)
                     {
@@ -88,13 +91,14 @@ public class ScotlandYard implements Runnable {
                     }
                     //fugitiveIn=true;
                 } while (!fugitiveIn);
-
+                assert server != null;
                 System.out.println(this.gamenumber);
 
                 // Spawn a thread to run the Fugitive
                 Runnable  tau1 =  new ServerThread(board,  -1,  socket,  port,  gamenumber);
                 this.board.threadInfoProtector.acquire();
                 this.board.totalThreads += 1; //?
+                this.board.playingThreads += 1;
                 this.board.threadInfoProtector.release();
                 threadPool.execute(tau1);
 
@@ -114,11 +118,15 @@ public class ScotlandYard implements Runnable {
                     try {
                         socket1 = server.accept();
 
+
                     } catch (SocketTimeoutException t) {
                         if (!this.board.dead)
                             continue;
+                        else
+                         break;    
                     }
-					
+                    assert socket1 != null;
+					//System.out.println("wdcwr");
 					
 					/*
 					acquire thread info lock, and decide whether you can serve the connection at this moment,
@@ -129,32 +137,38 @@ public class ScotlandYard implements Runnable {
 
 					don't forget to release lock when done!
 					*/
+                    ///System.out.println("crcefecf1");
                     this.board.threadInfoProtector.acquire();
-                    if(this.board.getAvailableID() != -1 && !this.board.dead) {
-                        int new_id = this.board.getAvailableID();
+                    //System.out.println("crcefecf2");
+                    int k = this.board.getAvailableID() ;
+                    if(k!= -1 && !this.board.dead) {
+
+                        int new_id = k;
                         Runnable tau3 =  new ServerThread(board,  new_id,  socket1,  port,  gamenumber);
                         threadPool.execute(tau3);
                         this.board.totalThreads += 1;
+                        //System.out.println("crcefecf");
 
                     }
-                    else if(this.board.getAvailableID() == -1 && !this.board.dead){
+                    else if(k== -1 && !this.board.dead){
                         continue;
                     }
-                    else if(this.board.getAvailableID() == -1 && this.board.dead){
+                    else if(k == -1 && this.board.dead){
                         break;
                     }
                     this.board.threadInfoProtector.release();
+                }
+                /*
+				reap the moderator thread, close the server,
 
-				/*
-				reap the moderator thread, close the server, 
-				
 				kill threadPool (Careless Whispers BGM stops)
 				*/
-                    mod.join();
+                System.out.println("exiting ..1");
+                mod.join();
+                if(server!=null)
                     server.close();
-                    threadPool.shutdown();
-
-                }
+                System.out.println("exiting ..2");    
+                threadPool.shutdown();
 
                 System.out.println(String.format("Game %d:%d Over", this.port, this.gamenumber));
                 return;
